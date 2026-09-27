@@ -1,0 +1,30 @@
+{
+  "name": "obsidian-file-shortcuts",
+  "version": "0.1.0",
+  "description": "Named file shortcuts inside an Obsidian vault",
+  "main": "main.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && node esbuild.config.mjs",
+    "test": "node scripts/test.mjs",
+    "package": "npm run build && python3 scripts/package.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quannguyen83/obsidian-file-shortcuts.git"
+  },
+  "keywords": [],
+  "author": "quannguyen83",
+  "license": "MIT",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/quannguyen83/obsidian-file-shortcuts/issues"
+  },
+  "homepage": "https://github.com/quannguyen83/obsidian-file-shortcuts#readme",
+  "devDependencies": {
+    "@types/node": "26.6.3",
+    "esbuild": "0.28.2",
+    "obsidian": "1.13.1",
+    "typescript": "7.0.2"
+  }
+}

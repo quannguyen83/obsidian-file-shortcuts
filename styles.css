@@ -1,0 +1,6 @@
+.file-shortcuts-target {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.file-shortcuts-error { color: var(--text-error); }
+.file-shortcuts-repair { margin-inline-start: 0.5em; }

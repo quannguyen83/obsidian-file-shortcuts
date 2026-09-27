@@ -1,0 +1,10 @@
+{
+  "id": "file-shortcuts",
+  "name": "File Shortcuts",
+  "version": "0.1.0",
+  "minAppVersion": "1.7.2",
+  "description": "Create named shortcuts in your folders that open the original vault files with one click.",
+  "author": "quannguyen83",
+  "authorUrl": "https://github.com/quannguyen83",
+  "isDesktopOnly": false
+}
