@@ -117,11 +117,11 @@ function suggestedName(title) {
   const name = title.replace(/[<>:"/\\|?*\x00-\x1f]/g, " ").replace(/\s+/g, " ").trim().replace(/^\.+/, "").slice(0, 160).replace(/[. ]+$/, "");
   return !name || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name) ? `Paper ${name || "shortcut"}` : name;
 }
-async function loadPdfCatalog(app) {
+async function readPdfMetadata(app) {
   const path = `${app.vault.configDir}/plugins/obsidian-zotero-bridge/data.json`;
   const metadata = /* @__PURE__ */ new Map();
   let warning = "";
-  if (await app.vault.adapter.exists(path)) {
+  if (app.vault.adapter && await app.vault.adapter.exists(path)) {
     try {
       const data = JSON.parse(await app.vault.adapter.read(path));
       for (const [vaultPath, value] of Object.entries(data.pdfs ?? {})) {
@@ -133,6 +133,12 @@ async function loadPdfCatalog(app) {
   } else {
     warning = "No Bridge metadata found. Showing PDFs in Zotero PDFs. Update Bridge to save titles and import dates.";
   }
+  return { metadata, warning };
+}
+async function loadPdfCatalog(app) {
+  const loaded = await readPdfMetadata(app);
+  const metadata = loaded.metadata;
+  let warning = loaded.warning;
   const files = app.vault.getFiles();
   const entries = files.filter((file) => file.extension.toLowerCase() === "pdf" && (metadata.has(file.path) || file.path.startsWith("Zotero PDFs/"))).map((file) => entryFrom(file, metadata.get(file.path)));
   const byPath = new Map(entries.map((entry) => [entry.file.path, entry]));
@@ -257,16 +263,33 @@ var FilePicker = class extends import_obsidian3.FuzzySuggestModal {
   constructor(app, choose) {
     super(app);
     this.choose = choose;
-    this.setPlaceholder("Choose the file to open");
+    this.metadata = /* @__PURE__ */ new Map();
+    this.setPlaceholder("Search title or path \u2014 newest imports / files first");
+  }
+  async prepare() {
+    try {
+      this.metadata = (await readPdfMetadata(this.app)).metadata;
+    } catch {
+      this.metadata.clear();
+    }
+    return this;
   }
   getItems() {
-    return this.app.vault.getFiles();
+    return this.app.vault.getFiles().filter((file) => file.extension.toLowerCase() !== EXTENSION).sort((a, b) => entryFrom(b, this.metadata.get(b.path)).timestamp - entryFrom(a, this.metadata.get(a.path)).timestamp || this.getItemText(a).localeCompare(this.getItemText(b)));
   }
   getItemText(file) {
-    return file.path;
+    const title = this.metadata.get(file.path)?.title;
+    return title ? `${title} \u2014 ${file.path}` : file.path;
+  }
+  renderSuggestion(match, el) {
+    const entry = entryFrom(match.item, this.metadata.get(match.item.path));
+    el.createDiv({ text: entry.title });
+    const date = entry.timestamp > 0 ? new Date(entry.timestamp).toLocaleString() : "Unknown";
+    el.createDiv({ text: `${entry.file.path} \xB7 ${entry.dateSource === "import" ? "Imported" : "File created (approximate)"}: ${date}`, cls: "file-shortcuts-picker-detail" });
   }
   onChooseItem(file) {
-    this.choose(file);
+    if (file.extension.toLowerCase() === EXTENSION) return;
+    this.choose(file, this.metadata.get(file.path)?.title);
   }
 };
 var FolderPicker = class extends import_obsidian3.FuzzySuggestModal {
@@ -450,7 +473,7 @@ var FileShortcutsPlugin = class extends import_obsidian5.Plugin {
     this.addCommand({ id: "browse-imported-pdfs", name: "Browse imported PDFs", callback: browsePdfs });
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
       if (file instanceof import_obsidian5.TFile) {
-        menu.addItem((item) => item.setTitle("Create shortcut\u2026").setIcon("file-symlink").onClick(() => {
+        if (file.extension.toLowerCase() !== EXTENSION) menu.addItem((item) => item.setTitle("Create shortcut\u2026").setIcon("file-symlink").onClick(() => {
           void this.createFor(file);
         }));
         if (file.extension.toLowerCase() === EXTENSION) {
@@ -465,7 +488,7 @@ var FileShortcutsPlugin = class extends import_obsidian5.Plugin {
       name: "Create shortcut to current file",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
-        if (!file) return false;
+        if (!file || file.extension.toLowerCase() === EXTENSION) return false;
         if (!checking) void this.createFor(file);
         return true;
       }
@@ -495,13 +518,21 @@ var FileShortcutsPlugin = class extends import_obsidian5.Plugin {
     });
   }
   pickTarget(folder) {
-    new FilePicker(this.app, (file) => {
-      void this.createFor(file, folder);
-    }).open();
+    const picker = new FilePicker(this.app, (file, title) => {
+      void this.createFor(file, folder, title);
+    });
+    void picker.prepare().then(() => picker.open());
   }
   async createFor(file, folder, title, done) {
     try {
+      if (file.extension.toLowerCase() === EXTENSION) throw new Error("Choose an original file, not a shortcut.");
       const target = await this.resolve(file);
+      if (!title) {
+        try {
+          title = (await readPdfMetadata(this.app)).metadata.get(target.path)?.title;
+        } catch {
+        }
+      }
       const previous = this.app.vault.getAbstractFileByPath(this.lastFolder);
       const destination = folder ?? (previous instanceof import_obsidian5.TFolder ? previous : this.app.vault.getRoot());
       new CreateShortcutModal(this.app, target, destination, async (path, selectedFolder) => {
@@ -521,7 +552,7 @@ var FileShortcutsPlugin = class extends import_obsidian5.Plugin {
     }
   }
   repair(shortcut, onRepaired) {
-    new FilePicker(this.app, (chosen) => {
+    const picker = new FilePicker(this.app, (chosen) => {
       void (async () => {
         try {
           const target = await this.resolve(chosen);
@@ -533,7 +564,8 @@ var FileShortcutsPlugin = class extends import_obsidian5.Plugin {
           new import_obsidian5.Notice(error instanceof Error ? error.message : "Could not update shortcut.");
         }
       })();
-    }).open();
+    });
+    void picker.prepare().then(() => picker.open());
   }
   async updateTargets(oldPath, newPath, folder) {
     let failed = false;

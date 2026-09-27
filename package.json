@@ -1,6 +1,6 @@
 {
   "name": "obsidian-file-shortcuts",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Named file shortcuts inside an Obsidian vault",
   "main": "main.js",
   "scripts": {

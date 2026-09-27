@@ -162,7 +162,7 @@ test('context menu creates a named shortcut in a chosen folder; collisions never
   let click!: () => void;
   const item: any = { setTitle() { return this; }, setIcon() { return this; }, onClick(cb: () => void) { click = cb; return this; } };
   f.handlers['file-menu']({ addItem: (fn: any) => fn(item) }, folder);
-  click(); FuzzySuggestModal.picker.onChooseItem(pdf); await delay(0);
+  click(); await delay(0); FuzzySuggestModal.picker.onChooseItem(pdf); await delay(0);
   const name = Setting.controls.findLast((s) => s.name === 'Shortcut name')!.texts[0];
   name.callback('KLT paper');
   const create = Setting.controls.flatMap((s) => s.buttons).findLast((b) => b.text === 'Create shortcut')!;
@@ -171,7 +171,7 @@ test('context menu creates a named shortcut in a chosen folder; collisions never
   assert.equal(parseShortcut(link.content).target, pdf.path);
   assert.deepEqual(f.writes, ['Thesis/KLT paper.obslink']);
   // Repeat with the same chosen name: UI shows an error, original shortcut is untouched.
-  click(); FuzzySuggestModal.picker.onChooseItem(pdf); await delay(0);
+  click(); await delay(0); FuzzySuggestModal.picker.onChooseItem(pdf); await delay(0);
   Setting.controls.findLast((s) => s.name === 'Shortcut name')!.texts[0].callback('KLT paper');
   await Setting.controls.flatMap((s) => s.buttons).findLast((b) => b.text === 'Create shortcut')!.callback();
   assert.ok(Modal.last.contentEl.children.some((el) => /already exists/.test(el.text)));
@@ -220,4 +220,33 @@ test('PDF browser search and create action pass the readable title and original 
   await Setting.controls.flatMap(s => s.buttons).findLast(b => b.text === 'Create shortcut')!.callback();
   assert.deepEqual(selections, [{file: pdf, title:'Tracking through blur'}]);
   browser.close();
+});
+
+test('right-click file picker excludes shortcuts and sorts by import/creation date with readable titles', async () => {
+  const { FilePicker } = await import('../src/dialogs');
+  const f = fixture();
+  const old = f.add('Zotero PDFs/OLD.pdf'); old.stat.ctime = 10;
+  const imported = f.add('Zotero PDFs/KEY.pdf'); imported.stat.ctime = 5;
+  const recent = f.add('Notes/New.md'); recent.stat.ctime = 20;
+  const shortcut = f.add('Readable.OBSLINK'); shortcut.stat.ctime = 999;
+  Object.assign(f.vault, {configDir:'.obsidian',adapter:{exists:async()=>true,read:async()=>JSON.stringify({pdfs:{[imported.path]:{title:'Paper about KLT',importedAt:new Date(100).toISOString()}}})}});
+  const selected: any[] = [];
+  const picker = new FilePicker(f.app as any, (file,title)=>selected.push({file,title}));
+  await picker.prepare();
+  assert.deepEqual(picker.getItems(),[imported,recent,old]);
+  assert.match(picker.getItemText(imported as any),/Paper about KLT/);
+  picker.onChooseItem(shortcut as any); assert.equal(selected.length,0);
+  picker.onChooseItem(imported as any); assert.deepEqual(selected,[{file:imported,title:'Paper about KLT'}]);
+});
+
+test('shortcut files offer repair only and cannot use create-shortcut command', async () => {
+  const f = fixture(); const shortcut = f.add('Paper.obslink',serializeShortcut('a.pdf'));
+  f.app.workspace.getActiveFile = () => shortcut as any;
+  const plugin = new FileShortcutsPlugin() as any; plugin.app=f.app; await plugin.onload();
+  const titles: string[] = [];
+  f.handlers['file-menu']({addItem:(fn:any)=>{const item:any={setTitle:(title:string)=>{titles.push(title);return item;},setIcon:()=>item,onClick:()=>item};fn(item);}},shortcut);
+  assert.deepEqual(titles,['Change shortcut target…']);
+  assert.equal(plugin.commands.find((c:any)=>c.id==='create-shortcut').checkCallback(true),false);
+  await plugin.createFor(shortcut);
+  assert.deepEqual(f.writes,[]);
 });

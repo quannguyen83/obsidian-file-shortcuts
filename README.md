@@ -4,7 +4,7 @@ Tạo một file shortcut có tên dễ đọc trong folder bạn chọn. Bấm 
 
 Ví dụ: đặt `Thesis/Visual Odometry/KLT khi ảnh bị mờ.obslink` trỏ tới `Zotero PDFs/3FI3GWR4.pdf`. Bạn tự tổ chức folder trong vault; PDF tiếp tục nằm ở đường dẫn đã import.
 
-## Cài đặt v0.2.0
+## Cài đặt v0.2.1
 
 ### Qua BRAT
 
@@ -16,7 +16,7 @@ Ví dụ: đặt `Thesis/Visual Odometry/KLT khi ảnh bị mờ.obslink` trỏ 
 
 ### Cài ZIP thủ công
 
-**[Tải bản cài ZIP](https://github.com/quannguyen83/obsidian-file-shortcuts/raw/refs/heads/main/release/file-shortcuts-0.2.0.zip)**
+**[Tải bản cài ZIP](https://github.com/quannguyen83/obsidian-file-shortcuts/raw/refs/heads/main/release/file-shortcuts-0.2.1.zip)**
 
 1. Giải nén ZIP. Bạn sẽ nhận được folder `file-shortcuts` chứa `main.js`, `manifest.json` và `styles.css`.
 2. Chép folder đó vào `<vault>/.obsidian/plugins/`. Kết quả phải là `<vault>/.obsidian/plugins/file-shortcuts/manifest.json`, không lồng thêm một folder nữa.
@@ -54,6 +54,12 @@ Nếu Bridge chưa cài hoặc chưa lưu metadata, danh sách vẫn tìm PDF tr
 5. Bấm file `.obslink` vừa tạo để mở file gốc.
 
 Folder bạn chọn được nhớ cho lần tạo tiếp theo. Hãy tạo các folder mong muốn bằng File Explorer như bình thường.
+
+### Chọn file trong menu chuột phải
+
+Danh sách chỉ cho chọn **file gốc**, không liệt kê `.obslink`. Khi chưa nhập tìm kiếm, danh sách xếp **mới nhất trước**: dùng ngày import do Bridge lưu, hoặc ngày tạo file (ghi rõ approximate). Khi tìm kiếm, kết quả được xếp theo độ khớp tìm kiếm của Obsidian.
+
+PDF đã có metadata hiển thị tên bài, đường dẫn và thời điểm ngay trong cửa sổ chọn file. Tên bài được điền sẵn làm tên shortcut. Chuột phải `.obslink` chỉ có **Change shortcut target…**, không có **Create shortcut…**.
 
 ### Tạo ngay trong folder
 

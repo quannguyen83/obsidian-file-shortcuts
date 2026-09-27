@@ -1,14 +1,37 @@
-import { App, FuzzySuggestModal, Modal, Setting, TFile, TFolder, type ButtonComponent } from 'obsidian';
-import { shortcutName } from './shortcut';
+import { App, FuzzySuggestModal, Modal, Setting, TFile, TFolder, type ButtonComponent, type FuzzyMatch } from 'obsidian';
+import { entryFrom, readPdfMetadata, type Metadata } from './pdf-catalog';
+import { EXTENSION, shortcutName } from './shortcut';
 
 export class FilePicker extends FuzzySuggestModal<TFile> {
-  constructor(app: App, private readonly choose: (file: TFile) => void) {
+  private metadata = new Map<string, Metadata>();
+  constructor(app: App, private readonly choose: (file: TFile, title?: string) => void) {
     super(app);
-    this.setPlaceholder('Choose the file to open');
+    this.setPlaceholder('Search title or path — newest imports / files first');
   }
-  getItems(): TFile[] { return this.app.vault.getFiles(); }
-  getItemText(file: TFile): string { return file.path; }
-  onChooseItem(file: TFile): void { this.choose(file); }
+  async prepare(): Promise<this> {
+    try { this.metadata = (await readPdfMetadata(this.app)).metadata; }
+    catch { this.metadata.clear(); }
+    return this;
+  }
+  getItems(): TFile[] {
+    return this.app.vault.getFiles().filter((file) => file.extension.toLowerCase() !== EXTENSION)
+      .sort((a, b) => entryFrom(b, this.metadata.get(b.path)).timestamp - entryFrom(a, this.metadata.get(a.path)).timestamp
+        || this.getItemText(a).localeCompare(this.getItemText(b)));
+  }
+  getItemText(file: TFile): string {
+    const title = this.metadata.get(file.path)?.title;
+    return title ? `${title} — ${file.path}` : file.path;
+  }
+  renderSuggestion(match: FuzzyMatch<TFile>, el: HTMLElement): void {
+    const entry = entryFrom(match.item, this.metadata.get(match.item.path));
+    el.createDiv({ text: entry.title });
+    const date = entry.timestamp > 0 ? new Date(entry.timestamp).toLocaleString() : 'Unknown';
+    el.createDiv({ text: `${entry.file.path} · ${entry.dateSource === 'import' ? 'Imported' : 'File created (approximate)'}: ${date}`, cls: 'file-shortcuts-picker-detail' });
+  }
+  onChooseItem(file: TFile): void {
+    if (file.extension.toLowerCase() === EXTENSION) return;
+    this.choose(file, this.metadata.get(file.path)?.title);
+  }
 }
 
 class FolderPicker extends FuzzySuggestModal<TFolder> {

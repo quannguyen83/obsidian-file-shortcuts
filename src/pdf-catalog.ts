@@ -9,7 +9,7 @@ export interface PdfEntry {
   dateSource: 'import' | 'created' | 'unknown';
   shortcuts: string[];
 }
-interface Metadata { vaultPath?: string; attachmentKey?: string; title?: string; importedAt?: string }
+export interface Metadata { vaultPath?: string; attachmentKey?: string; title?: string; importedAt?: string }
 export type CatalogFilter = 'all' | 'recent' | 'unlinked';
 
 export function entryFrom(file: TFile, metadata: Metadata = {}, shortcuts: string[] = []): PdfEntry {
@@ -41,11 +41,11 @@ export function suggestedName(title: string): string {
   return !name || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name) ? `Paper ${name || 'shortcut'}` : name;
 }
 
-export async function loadPdfCatalog(app: App): Promise<{ entries: PdfEntry[]; warning: string }> {
+export async function readPdfMetadata(app: App): Promise<{ metadata: Map<string, Metadata>; warning: string }> {
   const path = `${app.vault.configDir}/plugins/obsidian-zotero-bridge/data.json`;
   const metadata = new Map<string, Metadata>();
   let warning = '';
-  if (await app.vault.adapter.exists(path)) {
+  if (app.vault.adapter && await app.vault.adapter.exists(path)) {
     try {
       const data = JSON.parse(await app.vault.adapter.read(path));
       for (const [vaultPath, value] of Object.entries(data.pdfs ?? {})) {
@@ -57,6 +57,13 @@ export async function loadPdfCatalog(app: App): Promise<{ entries: PdfEntry[]; w
   } else {
     warning = 'No Bridge metadata found. Showing PDFs in Zotero PDFs. Update Bridge to save titles and import dates.';
   }
+  return { metadata, warning };
+}
+
+export async function loadPdfCatalog(app: App): Promise<{ entries: PdfEntry[]; warning: string }> {
+  const loaded = await readPdfMetadata(app);
+  const metadata = loaded.metadata;
+  let warning = loaded.warning;
   const files = app.vault.getFiles();
   const entries = files.filter((file) => file.extension.toLowerCase() === 'pdf' &&
     (metadata.has(file.path) || file.path.startsWith('Zotero PDFs/')))

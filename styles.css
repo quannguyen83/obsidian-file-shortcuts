@@ -11,3 +11,5 @@
 .file-shortcuts-pdf-card h3 { margin: 0 0 8px; overflow-wrap: anywhere; }
 .file-shortcuts-pdf-card p { margin: 5px 0; overflow-wrap: anywhere; }
 .file-shortcuts-pdf-card .setting-item { border-top: none; padding-bottom: 0; }
+
+.file-shortcuts-picker-detail { color: var(--text-muted); font-size: var(--font-smallest); overflow-wrap: anywhere; }

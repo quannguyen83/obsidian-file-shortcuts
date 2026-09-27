@@ -1,6 +1,6 @@
 import { Notice, Plugin, TFile, TFolder } from 'obsidian';
 import { PdfBrowser } from './pdf-browser';
-import { suggestedName } from './pdf-catalog';
+import { suggestedName, readPdfMetadata } from './pdf-catalog';
 import { CreateShortcutModal, FilePicker } from './dialogs';
 import { EXTENSION, VIEW_TYPE, movedTarget, parseShortcut, resolveShortcut, serializeShortcut } from './shortcut';
 import { ShortcutView } from './shortcut-view';
@@ -25,7 +25,7 @@ export default class FileShortcutsPlugin extends Plugin {
 
     this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => {
       if (file instanceof TFile) {
-        menu.addItem((item) => item.setTitle('Create shortcut…').setIcon('file-symlink')
+        if (file.extension.toLowerCase() !== EXTENSION) menu.addItem((item) => item.setTitle('Create shortcut…').setIcon('file-symlink')
           .onClick(() => { void this.createFor(file); }));
         if (file.extension.toLowerCase() === EXTENSION) {
           menu.addItem((item) => item.setTitle('Change shortcut target…').setIcon('file-pen-line')
@@ -41,7 +41,7 @@ export default class FileShortcutsPlugin extends Plugin {
       id: 'create-shortcut', name: 'Create shortcut to current file',
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
-        if (!file) return false;
+        if (!file || file.extension.toLowerCase() === EXTENSION) return false;
         if (!checking) void this.createFor(file);
         return true;
       },
@@ -76,12 +76,18 @@ export default class FileShortcutsPlugin extends Plugin {
   }
 
   private pickTarget(folder?: TFolder): void {
-    new FilePicker(this.app, (file) => { void this.createFor(file, folder); }).open();
+    const picker = new FilePicker(this.app, (file, title) => { void this.createFor(file, folder, title); });
+    void picker.prepare().then(() => picker.open());
   }
 
   private async createFor(file: TFile, folder?: TFolder, title?: string, done?: () => void): Promise<void> {
     try {
+      if (file.extension.toLowerCase() === EXTENSION) throw new Error('Choose an original file, not a shortcut.');
       const target = await this.resolve(file);
+      if (!title) {
+        try { title = (await readPdfMetadata(this.app)).metadata.get(target.path)?.title; }
+        catch { /* General file shortcuts still work without Bridge metadata. */ }
+      }
       const previous = this.app.vault.getAbstractFileByPath(this.lastFolder);
       const destination = folder ?? (previous instanceof TFolder ? previous : this.app.vault.getRoot());
       new CreateShortcutModal(this.app, target, destination, async (path, selectedFolder) => {
@@ -100,7 +106,7 @@ export default class FileShortcutsPlugin extends Plugin {
   }
 
   private repair(shortcut: TFile, onRepaired?: () => void): void {
-    new FilePicker(this.app, (chosen) => {
+    const picker = new FilePicker(this.app, (chosen) => {
       void (async () => {
         try {
           const target = await this.resolve(chosen);
@@ -110,7 +116,8 @@ export default class FileShortcutsPlugin extends Plugin {
           onRepaired?.();
         } catch (error) { new Notice(error instanceof Error ? error.message : 'Could not update shortcut.'); }
       })();
-    }).open();
+    });
+    void picker.prepare().then(() => picker.open());
   }
 
   private async updateTargets(oldPath: string, newPath: string, folder: boolean): Promise<void> {
