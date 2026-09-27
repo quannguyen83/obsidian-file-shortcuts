@@ -1,9 +1,11 @@
 """Make a reproducible ZIP ready to extract into a vault's .obsidian/plugins/."""
 from pathlib import Path
+import json
 from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 
 root = Path(__file__).resolve().parent.parent
-output = root / 'release' / 'file-shortcuts-0.1.0.zip'
+version = json.loads((root / 'manifest.json').read_text())['version']
+output = root / 'release' / f'file-shortcuts-{version}.zip'
 output.parent.mkdir(exist_ok=True)
 with ZipFile(output, 'w', compression=ZIP_DEFLATED) as archive:
     for name in ('manifest.json', 'main.js', 'styles.css'):

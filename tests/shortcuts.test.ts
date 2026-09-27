@@ -180,3 +180,44 @@ test('context menu creates a named shortcut in a chosen folder; collisions never
   assert.equal(f.vault.getFile(pdf.path), pdf);
   assert.equal(pdf.content, 'PDF bytes');
 });
+
+
+test('PDF catalog keeps import dates exact, legacy dates approximate, and finds existing shortcuts', async () => {
+  const { loadPdfCatalog, selectEntries, suggestedName } = await import('../src/pdf-catalog');
+  const f = fixture();
+  const now = Date.now();
+  const pdf = f.add('Zotero PDFs/A.pdf'); pdf.stat.ctime = now - 86400000;
+  const old = f.add('Zotero PDFs/B.pdf'); old.stat.ctime = now - 30 * 86400000; old.stat.mtime = now;
+  f.add('Thesis/Tracking.obslink', serializeShortcut(pdf.path));
+  f.add('Thesis/Copy.obslink', serializeShortcut('Thesis/Tracking.obslink'));
+  f.add('Thesis/Broken.obslink', 'invalid JSON');
+  const mapping = { pdfs: { [pdf.path]: { title: 'Motion blur and KLT', attachmentKey: 'A', importedAt: new Date(now).toISOString() }, [old.path]: { title: 'Older odometry paper', attachmentKey: 'B' } } };
+  Object.assign(f.vault, { configDir: '.custom', adapter: { exists: async (path: string) => path.startsWith('.custom/'), read: async () => JSON.stringify(mapping) } });
+  const catalog = await loadPdfCatalog(f.app as any);
+  assert.equal(catalog.entries.length, 2);
+  const newest = selectEntries(catalog.entries, '', 'all', now)[0];
+  assert.equal(newest.title, 'Motion blur and KLT'); assert.equal(newest.dateSource, 'import');
+  assert.deepEqual(newest.shortcuts, ['Thesis/Tracking.obslink', 'Thesis/Copy.obslink']);
+  assert.deepEqual(selectEntries(catalog.entries, '', 'unlinked', now).map(e => e.file), [old]);
+  assert.deepEqual(selectEntries(catalog.entries, '', 'recent', now).map(e => e.file), [pdf]);
+  assert.equal(selectEntries(catalog.entries, 'KLT motion', 'all', now).length, 1);
+  assert.equal(selectEntries(catalog.entries, 'B.pdf', 'all', now)[0].dateSource, 'created');
+  assert.match(catalog.warning, /broken shortcut/);
+  assert.equal(suggestedName('KLT: why / blur?'), 'KLT why blur');
+  assert.equal(suggestedName('CON'), 'Paper CON');
+  assert.deepEqual(f.writes, []);
+});
+
+test('PDF browser search and create action pass the readable title and original TFile', async () => {
+  const { PdfBrowser } = await import('../src/pdf-browser');
+  const f = fixture(); const pdf = f.add('Zotero PDFs/KEY.pdf');
+  Object.assign(f.vault, { configDir: '.obsidian', adapter: { exists: async () => true, read: async () => JSON.stringify({pdfs:{[pdf.path]:{title:'Tracking through blur',attachmentKey:'KEY'}}}) } });
+  const selections: any[] = [];
+  const browser = new PdfBrowser(f.app as any, async (file, title) => { selections.push({ file, title }); });
+  browser.open(); await delay(0);
+  const search = Setting.controls.findLast(s => s.name === 'Search')!.texts[0];
+  search.callback('Tracking');
+  await Setting.controls.flatMap(s => s.buttons).findLast(b => b.text === 'Create shortcut')!.callback();
+  assert.deepEqual(selections, [{file: pdf, title:'Tracking through blur'}]);
+  browser.close();
+});

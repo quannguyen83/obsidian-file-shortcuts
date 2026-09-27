@@ -1,4 +1,6 @@
 import { Notice, Plugin, TFile, TFolder } from 'obsidian';
+import { PdfBrowser } from './pdf-browser';
+import { suggestedName } from './pdf-catalog';
 import { CreateShortcutModal, FilePicker } from './dialogs';
 import { EXTENSION, VIEW_TYPE, movedTarget, parseShortcut, resolveShortcut, serializeShortcut } from './shortcut';
 import { ShortcutView } from './shortcut-view';
@@ -15,6 +17,11 @@ export default class FileShortcutsPlugin extends Plugin {
       repair: (file, onRepaired) => this.repair(file, onRepaired),
     }));
     this.registerExtensions([EXTENSION], VIEW_TYPE);
+
+    const browsePdfs = () => new PdfBrowser(this.app, (file, title, done) => this.createFor(file, undefined, title, done)).open();
+    this.addRibbonIcon('library', 'Browse imported PDFs', browsePdfs);
+    this.addCommand({ id: 'browse-imported-pdfs', name: 'Browse imported PDFs', callback: browsePdfs });
+
 
     this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => {
       if (file instanceof TFile) {
@@ -72,7 +79,7 @@ export default class FileShortcutsPlugin extends Plugin {
     new FilePicker(this.app, (file) => { void this.createFor(file, folder); }).open();
   }
 
-  private async createFor(file: TFile, folder?: TFolder): Promise<void> {
+  private async createFor(file: TFile, folder?: TFolder, title?: string, done?: () => void): Promise<void> {
     try {
       const target = await this.resolve(file);
       const previous = this.app.vault.getAbstractFileByPath(this.lastFolder);
@@ -85,7 +92,8 @@ export default class FileShortcutsPlugin extends Plugin {
         try { await this.saveData({ lastFolder: this.lastFolder }); }
         catch (error) { console.error('[file-shortcuts] Failed to save folder preference', error); }
         new Notice(`Shortcut created: ${path}`);
-      }).open();
+        done?.();
+      }, title ? suggestedName(title) : undefined).open();
     } catch (error) {
       new Notice(error instanceof Error ? error.message : 'Could not create shortcut.');
     }

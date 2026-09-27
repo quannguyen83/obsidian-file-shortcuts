@@ -4,7 +4,7 @@ Tạo một file shortcut có tên dễ đọc trong folder bạn chọn. Bấm 
 
 Ví dụ: đặt `Thesis/Visual Odometry/KLT khi ảnh bị mờ.obslink` trỏ tới `Zotero PDFs/3FI3GWR4.pdf`. Bạn tự tổ chức folder trong vault; PDF tiếp tục nằm ở đường dẫn đã import.
 
-## Cài đặt v0.1.0
+## Cài đặt v0.2.0
 
 ### Qua BRAT
 
@@ -16,7 +16,7 @@ Ví dụ: đặt `Thesis/Visual Odometry/KLT khi ảnh bị mờ.obslink` trỏ 
 
 ### Cài ZIP thủ công
 
-**[Tải bản cài ZIP](https://github.com/quannguyen83/obsidian-file-shortcuts/raw/refs/heads/main/release/file-shortcuts-0.1.0.zip)**
+**[Tải bản cài ZIP](https://github.com/quannguyen83/obsidian-file-shortcuts/raw/refs/heads/main/release/file-shortcuts-0.2.0.zip)**
 
 1. Giải nén ZIP. Bạn sẽ nhận được folder `file-shortcuts` chứa `main.js`, `manifest.json` và `styles.css`.
 2. Chép folder đó vào `<vault>/.obsidian/plugins/`. Kết quả phải là `<vault>/.obsidian/plugins/file-shortcuts/manifest.json`, không lồng thêm một folder nữa.
@@ -24,6 +24,24 @@ Ví dụ: đặt `Thesis/Visual Odometry/KLT khi ảnh bị mờ.obslink` trỏ 
 4. Vào **Settings → Community plugins**, bật **File Shortcuts**. Nếu đang ở Restricted mode, tắt chế độ đó trước.
 
 Yêu cầu Obsidian **1.7.2 trở lên**. Plugin chưa được phát hành vào Community plugins directory; bản ZIP có sẵn file build, không cần Node.js hay build thủ công.
+
+## Tìm PDF mới import hoặc PDF cũ để tạo shortcut
+
+Bấm biểu tượng **thư viện** trên ribbon bên trái, hoặc dùng lệnh **File Shortcuts: Browse imported PDFs**.
+
+- **Search**: tìm theo tên bài báo, attachment key, đường dẫn PDF hoặc đường dẫn shortcut.
+- **All imported PDFs**: xem toàn bộ, sắp xếp mới nhất trước.
+- **Recent — last 7 days**: các PDF có mốc thời gian trong 7 ngày gần nhất.
+- **Without a shortcut**: chỉ các PDF chưa có shortcut hợp lệ.
+- **Open PDF** mở đúng file gốc. **Create shortcut** điền sẵn tên bài báo để bạn chọn folder và chỉnh tên.
+- Mỗi mục hiển thị các shortcut đang trỏ tới PDF, kể cả shortcut nhiều tầng. Sau khi tạo, danh sách tự cập nhật.
+- **Reload list** đọc lại danh sách, ví dụ sau khi bạn vừa import thêm PDF.
+
+Cập nhật **obsidian-zotero-bridge lên 0.1.19** để lưu tên bài và thời điểm import. Với PDF đã import từ trước, mở Zotero có Companion đang bật, rồi bấm **Refresh titles from Zotero** một lần. Tên đã lưu dùng được cả khi Zotero đóng.
+
+**Imported** là timestamp thật do Bridge lưu khi import. **File created (approximate)** là ngày tạo file dùng tạm cho các PDF cũ; không phải ngày import đã được xác nhận. Bộ lọc Recent dùng mốc được hiển thị trên mỗi mục. Ngày sửa file không được dùng để suy đoán import.
+
+Nếu Bridge chưa cài hoặc chưa lưu metadata, danh sách vẫn tìm PDF trong `Zotero PDFs`, hiển thị tên file và ngày tạo. Plugin shortcut thông thường vẫn hoạt động độc lập. Companion hiện cung cấp tên bài và tên attachment, chưa cung cấp tác giả cho danh sách này.
 
 ## Sử dụng bằng chuột
 

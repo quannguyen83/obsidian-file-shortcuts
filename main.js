@@ -24,9 +24,12 @@ __export(main_exports, {
   default: () => FileShortcutsPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian3 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
-// src/dialogs.ts
+// src/pdf-browser.ts
+var import_obsidian2 = require("obsidian");
+
+// src/pdf-catalog.ts
 var import_obsidian = require("obsidian");
 
 // src/shortcut.ts
@@ -87,8 +90,170 @@ async function resolveShortcut(file, vault) {
   return current;
 }
 
+// src/pdf-catalog.ts
+function entryFrom(file, metadata = {}, shortcuts = []) {
+  const imported = typeof metadata.importedAt === "string" ? Date.parse(metadata.importedAt) : NaN;
+  const exact = Number.isFinite(imported) && imported > 0;
+  const created = file.stat?.ctime ?? 0;
+  return {
+    file,
+    title: typeof metadata.title === "string" && metadata.title.trim() ? metadata.title : file.basename,
+    key: typeof metadata.attachmentKey === "string" ? metadata.attachmentKey : file.basename,
+    timestamp: exact ? imported : created,
+    dateSource: exact ? "import" : created > 0 ? "created" : "unknown",
+    shortcuts
+  };
+}
+function selectEntries(entries, search, filter, now = Date.now()) {
+  const terms = search.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  return entries.filter((entry) => {
+    if (filter === "unlinked" && entry.shortcuts.length) return false;
+    if (filter === "recent" && (entry.timestamp < now - 7 * 864e5 || entry.timestamp > now)) return false;
+    const haystack = [entry.title, entry.key, entry.file.path, ...entry.shortcuts].join(" ").toLocaleLowerCase();
+    return terms.every((term) => haystack.includes(term));
+  }).sort((a, b) => b.timestamp - a.timestamp || a.title.localeCompare(b.title));
+}
+function suggestedName(title) {
+  const name = title.replace(/[<>:"/\\|?*\x00-\x1f]/g, " ").replace(/\s+/g, " ").trim().replace(/^\.+/, "").slice(0, 160).replace(/[. ]+$/, "");
+  return !name || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name) ? `Paper ${name || "shortcut"}` : name;
+}
+async function loadPdfCatalog(app) {
+  const path = `${app.vault.configDir}/plugins/obsidian-zotero-bridge/data.json`;
+  const metadata = /* @__PURE__ */ new Map();
+  let warning = "";
+  if (await app.vault.adapter.exists(path)) {
+    try {
+      const data = JSON.parse(await app.vault.adapter.read(path));
+      for (const [vaultPath, value] of Object.entries(data.pdfs ?? {})) {
+        if (value && typeof value === "object") metadata.set(vaultPath, value);
+      }
+    } catch {
+      warning = "Could not read Bridge metadata. Showing filenames and file creation dates.";
+    }
+  } else {
+    warning = "No Bridge metadata found. Showing PDFs in Zotero PDFs. Update Bridge to save titles and import dates.";
+  }
+  const files = app.vault.getFiles();
+  const entries = files.filter((file) => file.extension.toLowerCase() === "pdf" && (metadata.has(file.path) || file.path.startsWith("Zotero PDFs/"))).map((file) => entryFrom(file, metadata.get(file.path)));
+  const byPath = new Map(entries.map((entry) => [entry.file.path, entry]));
+  const shortcuts = files.filter((file) => file.extension.toLowerCase() === EXTENSION);
+  let invalid = 0;
+  for (const shortcut of shortcuts) {
+    try {
+      const target = await resolveShortcut(shortcut, {
+        read: (file) => app.vault.read(file),
+        getFile: (targetPath) => {
+          const file = app.vault.getAbstractFileByPath(targetPath);
+          return file instanceof import_obsidian.TFile ? file : null;
+        }
+      });
+      byPath.get(target.path)?.shortcuts.push(shortcut.path);
+    } catch {
+      invalid++;
+    }
+  }
+  if (invalid) warning += ` ${invalid} unreadable or broken shortcut(s) could not be indexed.`;
+  return { entries, warning: warning.trim() };
+}
+
+// src/pdf-browser.ts
+var PdfBrowser = class extends import_obsidian2.Modal {
+  constructor(app, create) {
+    super(app);
+    this.create = create;
+    this.entries = [];
+    this.search = "";
+    this.filter = "all";
+    this.generation = 0;
+    this.limit = 50;
+  }
+  onOpen() {
+    this.modalEl.addClass("file-shortcuts-browser");
+    this.setTitle("Imported PDFs");
+    this.contentEl.createEl("p", { text: "Find a paper, open its PDF, or create a shortcut. Newest files appear first.", cls: "file-shortcuts-target" });
+    new import_obsidian2.Setting(this.contentEl).setName("Search").addSearch((input) => input.setPlaceholder("Paper title, attachment key, or path\u2026").onChange((value) => {
+      this.search = value;
+      this.limit = 50;
+      this.render();
+    }));
+    new import_obsidian2.Setting(this.contentEl).setName("Show").addDropdown((dropdown) => dropdown.addOption("all", "All imported PDFs").addOption("recent", "Recent \u2014 last 7 days").addOption("unlinked", "Without a shortcut").onChange((value) => {
+      this.filter = value;
+      this.limit = 50;
+      this.render();
+    })).addButton((button) => button.setButtonText("Reload list").onClick(() => {
+      void this.reload();
+    })).addButton((button) => button.setButtonText("Refresh titles from Zotero").onClick(async () => {
+      const bridge = this.app.plugins?.getPlugin("obsidian-zotero-bridge");
+      if (!bridge?.refreshImportedPdfMetadata) {
+        new import_obsidian2.Notice("Enable Zotero Bridge 0.1.19 or newer to refresh titles.");
+        return;
+      }
+      button.setDisabled(true);
+      try {
+        const result = await bridge.refreshImportedPdfMetadata();
+        new import_obsidian2.Notice(`Updated ${result.updated} titles; ${result.unmatched} not found or ambiguous.`);
+        if (this.results.isConnected) await this.reload();
+      } catch {
+        new import_obsidian2.Notice("Could not refresh titles. Open Zotero with Companion enabled and try again. Cached titles are still available.");
+      } finally {
+        button.setDisabled(false);
+      }
+    }));
+    this.status = this.contentEl.createEl("p", { cls: "file-shortcuts-target", attr: { role: "status" } });
+    this.results = this.contentEl.createDiv({ cls: "file-shortcuts-results" });
+    void this.reload();
+  }
+  async reload() {
+    const generation = ++this.generation;
+    this.status.setText("Loading imported PDFs\u2026");
+    try {
+      const catalog = await loadPdfCatalog(this.app);
+      if (generation !== this.generation) return;
+      this.entries = catalog.entries;
+      this.status.setText(catalog.warning || "Older files use file creation time (approximate). Refresh titles once to identify existing imports.");
+      this.render();
+    } catch (error) {
+      if (generation === this.generation) this.status.setText(`Could not load PDFs: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  render() {
+    if (!this.results) return;
+    this.results.empty();
+    const selected = selectEntries(this.entries, this.search, this.filter);
+    this.results.createEl("p", { text: `${selected.length} of ${this.entries.length} PDFs`, cls: "file-shortcuts-target" });
+    if (!selected.length) this.results.createEl("p", { text: "No matching PDFs. Try All imported PDFs or clear the search." });
+    for (const entry of selected.slice(0, this.limit)) {
+      const card = this.results.createDiv({ cls: "file-shortcuts-pdf-card" });
+      card.createEl("h3", { text: entry.title });
+      card.createEl("p", { text: entry.file.path, cls: "file-shortcuts-target" });
+      const when = entry.timestamp > 0 ? new Date(entry.timestamp).toLocaleString() : "Unknown";
+      card.createEl("p", { text: `${entry.dateSource === "import" ? "Imported" : entry.dateSource === "created" ? "File created (approximate)" : "Date"}: ${when}` });
+      card.createEl("p", { text: entry.shortcuts.length ? `Shortcuts: ${entry.shortcuts.join(" \xB7 ")}` : "No shortcut yet", cls: "file-shortcuts-target" });
+      new import_obsidian2.Setting(card).addButton((button) => button.setButtonText("Open PDF").onClick(async () => {
+        try {
+          await this.app.workspace.getLeaf("tab").openFile(entry.file);
+          this.close();
+        } catch {
+          new import_obsidian2.Notice("Could not open the PDF. Reload the list to check whether it still exists.");
+        }
+      })).addButton((button) => button.setButtonText("Create shortcut").setCta().onClick(() => this.create(entry.file, entry.title, () => {
+        if (this.results.isConnected) void this.reload();
+      })));
+    }
+    if (selected.length > this.limit) new import_obsidian2.Setting(this.results).addButton((button) => button.setButtonText("Show more").onClick(() => {
+      this.limit += 50;
+      this.render();
+    }));
+  }
+  onClose() {
+    this.generation++;
+    this.contentEl.empty();
+  }
+};
+
 // src/dialogs.ts
-var FilePicker = class extends import_obsidian.FuzzySuggestModal {
+var import_obsidian3 = require("obsidian");
+var FilePicker = class extends import_obsidian3.FuzzySuggestModal {
   constructor(app, choose) {
     super(app);
     this.choose = choose;
@@ -104,7 +269,7 @@ var FilePicker = class extends import_obsidian.FuzzySuggestModal {
     this.choose(file);
   }
 };
-var FolderPicker = class extends import_obsidian.FuzzySuggestModal {
+var FolderPicker = class extends import_obsidian3.FuzzySuggestModal {
   constructor(app, choose) {
     super(app);
     this.choose = choose;
@@ -112,7 +277,7 @@ var FolderPicker = class extends import_obsidian.FuzzySuggestModal {
   }
   getItems() {
     const root = this.app.vault.getRoot();
-    const folders = this.app.vault.getAllLoadedFiles().filter((file) => file instanceof import_obsidian.TFolder && file !== root).sort((a, b) => a.path.localeCompare(b.path));
+    const folders = this.app.vault.getAllLoadedFiles().filter((file) => file instanceof import_obsidian3.TFolder && file !== root).sort((a, b) => a.path.localeCompare(b.path));
     return [root, ...folders];
   }
   getItemText(folder) {
@@ -122,19 +287,19 @@ var FolderPicker = class extends import_obsidian.FuzzySuggestModal {
     this.choose(folder);
   }
 };
-var CreateShortcutModal = class extends import_obsidian.Modal {
-  constructor(app, target, folder, create) {
+var CreateShortcutModal = class extends import_obsidian3.Modal {
+  constructor(app, target, folder, create, initialName) {
     super(app);
     this.target = target;
     this.folder = folder;
     this.create = create;
     this.busy = false;
-    this.name = target.basename;
+    this.name = initialName ?? target.basename;
   }
   onOpen() {
     this.setTitle("Create shortcut");
     this.contentEl.createEl("p", { text: `Opens: ${this.target.path}`, cls: "file-shortcuts-target" });
-    const folderSetting = new import_obsidian.Setting(this.contentEl).setName("Folder");
+    const folderSetting = new import_obsidian3.Setting(this.contentEl).setName("Folder");
     const updateFolder = () => folderSetting.setDesc(this.folder.isRoot() ? "/ (vault root)" : this.folder.path);
     updateFolder();
     folderSetting.addButton((button) => button.setButtonText("Choose folder").onClick(() => {
@@ -149,7 +314,7 @@ var CreateShortcutModal = class extends import_obsidian.Modal {
       preview.setText(`Filename: ${this.name.replace(/\.obslink$/i, "")}.obslink`);
     };
     let nameInput;
-    new import_obsidian.Setting(this.contentEl).setName("Shortcut name").addText((text) => {
+    new import_obsidian3.Setting(this.contentEl).setName("Shortcut name").addText((text) => {
       nameInput = text.inputEl;
       text.setValue(this.name).onChange((value) => {
         this.name = value;
@@ -184,7 +349,7 @@ var CreateShortcutModal = class extends import_obsidian.Modal {
         createButton.setDisabled(false);
       }
     };
-    new import_obsidian.Setting(this.contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => {
+    new import_obsidian3.Setting(this.contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => {
       if (!this.busy) this.close();
     })).addButton((button) => {
       createButton = button;
@@ -199,8 +364,8 @@ var CreateShortcutModal = class extends import_obsidian.Modal {
 };
 
 // src/shortcut-view.ts
-var import_obsidian2 = require("obsidian");
-var ShortcutView = class extends import_obsidian2.FileView {
+var import_obsidian4 = require("obsidian");
+var ShortcutView = class extends import_obsidian4.FileView {
   constructor(leaf, actions) {
     super(leaf);
     this.actions = actions;
@@ -266,7 +431,7 @@ var ShortcutView = class extends import_obsidian2.FileView {
 };
 
 // src/main.ts
-var FileShortcutsPlugin = class extends import_obsidian3.Plugin {
+var FileShortcutsPlugin = class extends import_obsidian5.Plugin {
   constructor() {
     super(...arguments);
     this.lastFolder = "/";
@@ -280,15 +445,18 @@ var FileShortcutsPlugin = class extends import_obsidian3.Plugin {
       repair: (file, onRepaired) => this.repair(file, onRepaired)
     }));
     this.registerExtensions([EXTENSION], VIEW_TYPE);
+    const browsePdfs = () => new PdfBrowser(this.app, (file, title, done) => this.createFor(file, void 0, title, done)).open();
+    this.addRibbonIcon("library", "Browse imported PDFs", browsePdfs);
+    this.addCommand({ id: "browse-imported-pdfs", name: "Browse imported PDFs", callback: browsePdfs });
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
-      if (file instanceof import_obsidian3.TFile) {
+      if (file instanceof import_obsidian5.TFile) {
         menu.addItem((item) => item.setTitle("Create shortcut\u2026").setIcon("file-symlink").onClick(() => {
           void this.createFor(file);
         }));
         if (file.extension.toLowerCase() === EXTENSION) {
           menu.addItem((item) => item.setTitle("Change shortcut target\u2026").setIcon("file-pen-line").onClick(() => this.repair(file)));
         }
-      } else if (file instanceof import_obsidian3.TFolder) {
+      } else if (file instanceof import_obsidian5.TFolder) {
         menu.addItem((item) => item.setTitle("Create shortcut here\u2026").setIcon("file-symlink").onClick(() => this.pickTarget(file)));
       }
     }));
@@ -305,14 +473,14 @@ var FileShortcutsPlugin = class extends import_obsidian3.Plugin {
     this.addCommand({ id: "choose-file-for-shortcut", name: "Choose a file and create shortcut", callback: () => this.pickTarget() });
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
       const newPath = file.path;
-      const folder = file instanceof import_obsidian3.TFolder;
+      const folder = file instanceof import_obsidian5.TFolder;
       if (folder && (this.lastFolder === oldPath || this.lastFolder.startsWith(`${oldPath}/`))) {
         this.lastFolder = movedTarget(this.lastFolder, oldPath, newPath, true);
         void this.saveData({ lastFolder: this.lastFolder }).catch((error) => console.error("[file-shortcuts] Failed to save folder preference", error));
       }
       this.renameQueue = this.renameQueue.then(() => this.updateTargets(oldPath, newPath, folder)).catch((error) => {
         console.error("[file-shortcuts] Could not update shortcut targets", error);
-        new import_obsidian3.Notice("Some shortcut targets could not be updated. Use Change shortcut target to repair them.");
+        new import_obsidian5.Notice("Some shortcut targets could not be updated. Use Change shortcut target to repair them.");
       });
     }));
   }
@@ -322,7 +490,7 @@ var FileShortcutsPlugin = class extends import_obsidian3.Plugin {
       read: (entry) => this.app.vault.read(entry),
       getFile: (path) => {
         const entry = this.app.vault.getAbstractFileByPath(path);
-        return entry instanceof import_obsidian3.TFile ? entry : null;
+        return entry instanceof import_obsidian5.TFile ? entry : null;
       }
     });
   }
@@ -331,11 +499,11 @@ var FileShortcutsPlugin = class extends import_obsidian3.Plugin {
       void this.createFor(file, folder);
     }).open();
   }
-  async createFor(file, folder) {
+  async createFor(file, folder, title, done) {
     try {
       const target = await this.resolve(file);
       const previous = this.app.vault.getAbstractFileByPath(this.lastFolder);
-      const destination = folder ?? (previous instanceof import_obsidian3.TFolder ? previous : this.app.vault.getRoot());
+      const destination = folder ?? (previous instanceof import_obsidian5.TFolder ? previous : this.app.vault.getRoot());
       new CreateShortcutModal(this.app, target, destination, async (path, selectedFolder) => {
         if (this.app.vault.getAbstractFileByPath(target.path) !== target) throw new Error("The target file no longer exists.");
         await this.app.vault.create(path, serializeShortcut(target.path));
@@ -345,10 +513,11 @@ var FileShortcutsPlugin = class extends import_obsidian3.Plugin {
         } catch (error) {
           console.error("[file-shortcuts] Failed to save folder preference", error);
         }
-        new import_obsidian3.Notice(`Shortcut created: ${path}`);
-      }).open();
+        new import_obsidian5.Notice(`Shortcut created: ${path}`);
+        done?.();
+      }, title ? suggestedName(title) : void 0).open();
     } catch (error) {
-      new import_obsidian3.Notice(error instanceof Error ? error.message : "Could not create shortcut.");
+      new import_obsidian5.Notice(error instanceof Error ? error.message : "Could not create shortcut.");
     }
   }
   repair(shortcut, onRepaired) {
@@ -358,10 +527,10 @@ var FileShortcutsPlugin = class extends import_obsidian3.Plugin {
           const target = await this.resolve(chosen);
           if (target === shortcut) throw new Error("A shortcut cannot point to itself.");
           await this.app.vault.modify(shortcut, serializeShortcut(target.path));
-          new import_obsidian3.Notice("Shortcut target updated.");
+          new import_obsidian5.Notice("Shortcut target updated.");
           onRepaired?.();
         } catch (error) {
-          new import_obsidian3.Notice(error instanceof Error ? error.message : "Could not update shortcut.");
+          new import_obsidian5.Notice(error instanceof Error ? error.message : "Could not update shortcut.");
         }
       })();
     }).open();

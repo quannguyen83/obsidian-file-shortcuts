@@ -4,3 +4,10 @@
 }
 .file-shortcuts-error { color: var(--text-error); }
 .file-shortcuts-repair { margin-inline-start: 0.5em; }
+
+.file-shortcuts-browser { width: min(850px, 94vw); }
+.file-shortcuts-results { max-height: 60vh; overflow-y: auto; }
+.file-shortcuts-pdf-card { border: 1px solid var(--background-modifier-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; }
+.file-shortcuts-pdf-card h3 { margin: 0 0 8px; overflow-wrap: anywhere; }
+.file-shortcuts-pdf-card p { margin: 5px 0; overflow-wrap: anywhere; }
+.file-shortcuts-pdf-card .setting-item { border-top: none; padding-bottom: 0; }

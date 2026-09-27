@@ -52,7 +52,7 @@ jobs:
 
           Assets: main.js, manifest.json, styles.css. Requires Obsidian 1.7.2 or newer.
 
-          Includes target rename tracking and repair for missing targets. Build and automated API-double tests pass; desktop Obsidian testing is still needed.
+          Includes an Imported PDFs browser with title search, recent and missing-shortcut filters, plus target rename tracking and repair. Zotero Bridge 0.1.19 supplies cached titles and exact timestamps for new imports. Build and automated API-double tests pass; desktop Obsidian testing is still needed.
           NOTES
           gh release create "$VERSION" main.js manifest.json styles.css \
             --target "$GITHUB_SHA" --title "File Shortcuts $VERSION" \

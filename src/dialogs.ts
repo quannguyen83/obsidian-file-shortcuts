@@ -36,9 +36,10 @@ export class CreateShortcutModal extends Modal {
     private readonly target: TFile,
     private folder: TFolder,
     private readonly create: (path: string, folder: TFolder) => Promise<void>,
+    initialName?: string,
   ) {
     super(app);
-    this.name = target.basename;
+    this.name = initialName ?? target.basename;
   }
 
   onOpen(): void {
