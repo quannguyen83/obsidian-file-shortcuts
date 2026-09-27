@@ -6,6 +6,16 @@ Ví dụ: đặt `Thesis/Visual Odometry/KLT khi ảnh bị mờ.obslink` trỏ 
 
 ## Cài đặt v0.1.0
 
+### Qua BRAT
+
+1. Trong BRAT, chọn **Add a beta plugin for testing**.
+2. Nhập `quannguyen83/obsidian-file-shortcuts`.
+3. Chọn **Add Plugin**, sau đó bật **File Shortcuts** trong Community plugins.
+
+[GitHub Releases](https://github.com/quannguyen83/obsidian-file-shortcuts/releases) chứa riêng `main.js`, `manifest.json`, `styles.css` để BRAT cài và cập nhật.
+
+### Cài ZIP thủ công
+
 **[Tải bản cài ZIP](https://github.com/quannguyen83/obsidian-file-shortcuts/raw/refs/heads/main/release/file-shortcuts-0.1.0.zip)**
 
 1. Giải nén ZIP. Bạn sẽ nhận được folder `file-shortcuts` chứa `main.js`, `manifest.json` và `styles.css`.
@@ -73,6 +83,8 @@ npm run build
 ```
 
 `npm run build` kiểm tra TypeScript và tạo `main.js`. `npm run package` tạo ZIP cài đặt trong `release/` (cần Python 3 cho bước ZIP). Repo giữ sẵn `main.js` và ZIP để cài thử.
+
+Workflow `Publish plugin release` kiểm tra build/tests và tạo GitHub Release theo version trong `manifest.json`. Khi tăng version trên `main`, workflow đính kèm ba file plugin để BRAT cập nhật. Release đã có sẽ không bị ghi đè.
 
 Các bài kiểm tra tự động bao gồm parse/path validation, shortcut nhiều tầng và vòng lặp, mở đúng TFile, tránh chuyển nhầm tab khi đọc file chậm, tạo shortcut từ menu folder, chặn ghi đè, file đích thiếu và cập nhật đường dẫn khi đổi tên liên tiếp. Tests dùng Obsidian API test doubles; không thay thế kiểm tra trên ứng dụng Obsidian thật.
 
