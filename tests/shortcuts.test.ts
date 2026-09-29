@@ -196,10 +196,10 @@ test('folder mode creates a paper folder containing the shortcut file', async ()
   const name = Setting.controls.findLast((s) => s.name === 'Shortcut name')!.texts[0];
   name.callback('Readable Paper');
   await Setting.controls.flatMap((s) => s.buttons).findLast((b) => b.text === 'Create shortcut')!.callback();
-  const link = f.vault.getFile('Papers/Readable Paper/Readable Paper.obslink')!;
+  const link = f.vault.getFile('Papers/Readable Paper/PDF.obslink')!;
   assert.ok(f.files.get('Papers/Readable Paper') instanceof TFolder);
   assert.equal(parseShortcut(link.content).target, pdf.path);
-  assert.deepEqual(f.writes, ['Papers/Readable Paper/Readable Paper.obslink']);
+  assert.deepEqual(f.writes, ['Papers/Readable Paper/PDF.obslink']);
 });
 
 

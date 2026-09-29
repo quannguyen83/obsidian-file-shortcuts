@@ -85,7 +85,8 @@ export class CreateShortcutModal extends Modal {
     const preview = this.contentEl.createEl('p', { cls: 'file-shortcuts-target' });
     const updatePreview = () => {
       const stem = this.name.replace(/\.obslink$/i, '');
-      preview.setText(this.layout === 'folder' ? `Creates: ${stem}/${stem}.obslink` : `Creates: ${stem}.obslink`);
+      const typeName = this.target.extension ? this.target.extension.toUpperCase() : 'FILE';
+      preview.setText(this.layout === 'folder' ? `Creates: ${stem}/${typeName}.obslink` : `Creates: ${stem}.obslink`);
     };
     let nameInput: HTMLInputElement | undefined;
     new Setting(this.contentEl).setName('Shortcut name').addText((text) => {
@@ -108,8 +109,9 @@ export class CreateShortcutModal extends Modal {
         const containerPath = this.layout === 'folder'
           ? (this.folder.isRoot() ? stem : `${this.folder.path}/${stem}`)
           : undefined;
+        const typeName = this.target.extension ? this.target.extension.toUpperCase() : 'FILE';
         const path = containerPath
-          ? `${containerPath}/${filename}`
+          ? `${containerPath}/${typeName}.${EXTENSION}`
           : (this.folder.isRoot() ? filename : `${this.folder.path}/${filename}`);
         if (containerPath && this.app.vault.getAbstractFileByPath(containerPath)) throw new Error('A folder or file with this name already exists. Choose another name or folder.');
         if (this.app.vault.getAbstractFileByPath(path)) throw new Error('A file with this name already exists. Choose another name or folder.');

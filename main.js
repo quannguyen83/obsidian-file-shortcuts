@@ -341,7 +341,8 @@ var CreateShortcutModal = class extends import_obsidian3.Modal {
     const preview = this.contentEl.createEl("p", { cls: "file-shortcuts-target" });
     const updatePreview = () => {
       const stem = this.name.replace(/\.obslink$/i, "");
-      preview.setText(this.layout === "folder" ? `Creates: ${stem}/${stem}.obslink` : `Creates: ${stem}.obslink`);
+      const typeName = this.target.extension ? this.target.extension.toUpperCase() : "FILE";
+      preview.setText(this.layout === "folder" ? `Creates: ${stem}/${typeName}.obslink` : `Creates: ${stem}.obslink`);
     };
     let nameInput;
     new import_obsidian3.Setting(this.contentEl).setName("Shortcut name").addText((text) => {
@@ -368,7 +369,8 @@ var CreateShortcutModal = class extends import_obsidian3.Modal {
         if (this.app.vault.getAbstractFileByPath(this.folder.path) !== this.folder) throw new Error("The selected folder no longer exists. Choose another folder.");
         const stem = filename.slice(0, -(EXTENSION.length + 1));
         const containerPath = this.layout === "folder" ? this.folder.isRoot() ? stem : `${this.folder.path}/${stem}` : void 0;
-        const path = containerPath ? `${containerPath}/${filename}` : this.folder.isRoot() ? filename : `${this.folder.path}/${filename}`;
+        const typeName = this.target.extension ? this.target.extension.toUpperCase() : "FILE";
+        const path = containerPath ? `${containerPath}/${typeName}.${EXTENSION}` : this.folder.isRoot() ? filename : `${this.folder.path}/${filename}`;
         if (containerPath && this.app.vault.getAbstractFileByPath(containerPath)) throw new Error("A folder or file with this name already exists. Choose another name or folder.");
         if (this.app.vault.getAbstractFileByPath(path)) throw new Error("A file with this name already exists. Choose another name or folder.");
         this.busy = true;
