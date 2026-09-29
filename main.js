@@ -316,6 +316,7 @@ var CreateShortcutModal = class extends import_obsidian3.Modal {
     this.target = target;
     this.folder = folder;
     this.create = create;
+    this.layout = "file";
     this.busy = false;
     this.name = initialName ?? target.basename;
   }
@@ -332,9 +333,15 @@ var CreateShortcutModal = class extends import_obsidian3.Modal {
         updateFolder();
       }).open();
     }));
+    const layoutSetting = new import_obsidian3.Setting(this.contentEl).setName("Create as");
+    layoutSetting.addDropdown((dropdown) => dropdown.addOption("file", "Shortcut file only").addOption("folder", "Folder containing shortcut").setValue(this.layout).onChange((value) => {
+      this.layout = value === "folder" ? "folder" : "file";
+      updatePreview();
+    }));
     const preview = this.contentEl.createEl("p", { cls: "file-shortcuts-target" });
     const updatePreview = () => {
-      preview.setText(`Filename: ${this.name.replace(/\.obslink$/i, "")}.obslink`);
+      const stem = this.name.replace(/\.obslink$/i, "");
+      preview.setText(this.layout === "folder" ? `Creates: ${stem}/${stem}.obslink` : `Creates: ${stem}.obslink`);
     };
     let nameInput;
     new import_obsidian3.Setting(this.contentEl).setName("Shortcut name").addText((text) => {
@@ -359,11 +366,14 @@ var CreateShortcutModal = class extends import_obsidian3.Modal {
       try {
         const filename = shortcutName(this.name);
         if (this.app.vault.getAbstractFileByPath(this.folder.path) !== this.folder) throw new Error("The selected folder no longer exists. Choose another folder.");
-        const path = this.folder.isRoot() ? filename : `${this.folder.path}/${filename}`;
+        const stem = filename.slice(0, -(EXTENSION.length + 1));
+        const containerPath = this.layout === "folder" ? this.folder.isRoot() ? stem : `${this.folder.path}/${stem}` : void 0;
+        const path = containerPath ? `${containerPath}/${filename}` : this.folder.isRoot() ? filename : `${this.folder.path}/${filename}`;
+        if (containerPath && this.app.vault.getAbstractFileByPath(containerPath)) throw new Error("A folder or file with this name already exists. Choose another name or folder.");
         if (this.app.vault.getAbstractFileByPath(path)) throw new Error("A file with this name already exists. Choose another name or folder.");
         this.busy = true;
         createButton.setDisabled(true);
-        await this.create(path, this.folder);
+        await this.create(path, this.folder, containerPath);
         this.close();
       } catch (error) {
         errorEl.setText(error instanceof Error ? error.message : "Could not create shortcut.");
@@ -535,8 +545,9 @@ var FileShortcutsPlugin = class extends import_obsidian5.Plugin {
       }
       const previous = this.app.vault.getAbstractFileByPath(this.lastFolder);
       const destination = folder ?? (previous instanceof import_obsidian5.TFolder ? previous : this.app.vault.getRoot());
-      new CreateShortcutModal(this.app, target, destination, async (path, selectedFolder) => {
+      new CreateShortcutModal(this.app, target, destination, async (path, selectedFolder, containerPath) => {
         if (this.app.vault.getAbstractFileByPath(target.path) !== target) throw new Error("The target file no longer exists.");
+        if (containerPath) await this.app.vault.createFolder(containerPath);
         await this.app.vault.create(path, serializeShortcut(target.path));
         this.lastFolder = selectedFolder.path;
         try {

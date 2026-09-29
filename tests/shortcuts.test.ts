@@ -26,6 +26,10 @@ function fixture() {
       if (files.has(path)) throw new Error('Already exists');
       writes.push(path); return add(path, content);
     },
+    createFolder: async (path: string) => {
+      if (files.has(path)) throw new Error('Already exists');
+      return folder(path);
+    },
     modify: async (f: TFile, content: string) => { writes.push(f.path); f.content = content; },
     process: async (f: TFile, fn: (content: string) => string) => { writes.push(f.path); f.content = fn(f.content); },
     on: (event: string, handler: any) => { handlers[event] = handler; return {}; },
@@ -179,6 +183,23 @@ test('context menu creates a named shortcut in a chosen folder; collisions never
   f.files.delete(link.path);
   assert.equal(f.vault.getFile(pdf.path), pdf);
   assert.equal(pdf.content, 'PDF bytes');
+});
+
+
+test('folder mode creates a paper folder containing the shortcut file', async () => {
+  const f = fixture(); const folder = f.folder('Papers');
+  const pdf = f.add('Zotero PDFs/A.pdf', 'PDF bytes');
+  const plugin = new FileShortcutsPlugin() as any; plugin.app = f.app; await plugin.onload();
+  await plugin.createFor(pdf, folder, 'Readable Paper');
+  const layout = Setting.controls.findLast((s) => s.name === 'Create as')!.texts[0];
+  layout.callback('folder');
+  const name = Setting.controls.findLast((s) => s.name === 'Shortcut name')!.texts[0];
+  name.callback('Readable Paper');
+  await Setting.controls.flatMap((s) => s.buttons).findLast((b) => b.text === 'Create shortcut')!.callback();
+  const link = f.vault.getFile('Papers/Readable Paper/Readable Paper.obslink')!;
+  assert.ok(f.files.get('Papers/Readable Paper') instanceof TFolder);
+  assert.equal(parseShortcut(link.content).target, pdf.path);
+  assert.deepEqual(f.writes, ['Papers/Readable Paper/Readable Paper.obslink']);
 });
 
 

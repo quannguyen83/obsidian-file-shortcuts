@@ -90,8 +90,9 @@ export default class FileShortcutsPlugin extends Plugin {
       }
       const previous = this.app.vault.getAbstractFileByPath(this.lastFolder);
       const destination = folder ?? (previous instanceof TFolder ? previous : this.app.vault.getRoot());
-      new CreateShortcutModal(this.app, target, destination, async (path, selectedFolder) => {
+      new CreateShortcutModal(this.app, target, destination, async (path, selectedFolder, containerPath) => {
         if (this.app.vault.getAbstractFileByPath(target.path) !== target) throw new Error('The target file no longer exists.');
+        if (containerPath) await this.app.vault.createFolder(containerPath);
         await this.app.vault.create(path, serializeShortcut(target.path));
         this.lastFolder = selectedFolder.path;
         // A failed preference save must not misreport a successfully created shortcut.

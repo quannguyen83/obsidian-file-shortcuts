@@ -52,13 +52,14 @@ class FolderPicker extends FuzzySuggestModal<TFolder> {
 
 export class CreateShortcutModal extends Modal {
   private name: string;
+  private layout: 'file' | 'folder' = 'file';
   private busy = false;
 
   constructor(
     app: App,
     private readonly target: TFile,
     private folder: TFolder,
-    private readonly create: (path: string, folder: TFolder) => Promise<void>,
+    private readonly create: (path: string, folder: TFolder, containerPath?: string) => Promise<void>,
     initialName?: string,
   ) {
     super(app);
@@ -75,8 +76,17 @@ export class CreateShortcutModal extends Modal {
       if (this.busy) return;
       new FolderPicker(this.app, (folder) => { this.folder = folder; updateFolder(); }).open();
     }));
+    const layoutSetting = new Setting(this.contentEl).setName('Create as');
+    layoutSetting.addDropdown((dropdown) => dropdown
+      .addOption('file', 'Shortcut file only')
+      .addOption('folder', 'Folder containing shortcut')
+      .setValue(this.layout)
+      .onChange((value) => { this.layout = value === 'folder' ? 'folder' : 'file'; updatePreview(); }));
     const preview = this.contentEl.createEl('p', { cls: 'file-shortcuts-target' });
-    const updatePreview = () => { preview.setText(`Filename: ${this.name.replace(/\.obslink$/i, '')}.obslink`); };
+    const updatePreview = () => {
+      const stem = this.name.replace(/\.obslink$/i, '');
+      preview.setText(this.layout === 'folder' ? `Creates: ${stem}/${stem}.obslink` : `Creates: ${stem}.obslink`);
+    };
     let nameInput: HTMLInputElement | undefined;
     new Setting(this.contentEl).setName('Shortcut name').addText((text) => {
       nameInput = text.inputEl;
@@ -94,11 +104,18 @@ export class CreateShortcutModal extends Modal {
       try {
         const filename = shortcutName(this.name);
         if (this.app.vault.getAbstractFileByPath(this.folder.path) !== this.folder) throw new Error('The selected folder no longer exists. Choose another folder.');
-        const path = this.folder.isRoot() ? filename : `${this.folder.path}/${filename}`;
+        const stem = filename.slice(0, -(EXTENSION.length + 1));
+        const containerPath = this.layout === 'folder'
+          ? (this.folder.isRoot() ? stem : `${this.folder.path}/${stem}`)
+          : undefined;
+        const path = containerPath
+          ? `${containerPath}/${filename}`
+          : (this.folder.isRoot() ? filename : `${this.folder.path}/${filename}`);
+        if (containerPath && this.app.vault.getAbstractFileByPath(containerPath)) throw new Error('A folder or file with this name already exists. Choose another name or folder.');
         if (this.app.vault.getAbstractFileByPath(path)) throw new Error('A file with this name already exists. Choose another name or folder.');
         this.busy = true;
         createButton.setDisabled(true);
-        await this.create(path, this.folder);
+        await this.create(path, this.folder, containerPath);
         this.close();
       } catch (error) {
         errorEl.setText(error instanceof Error ? error.message : 'Could not create shortcut.');
